@@ -1,0 +1,110 @@
+-- 获取进入 SOP 流程的 context_id
+select context_id from t_seat_assist_dialogue_log 
+where source='sop'and user_input = '_begin' and response_code = 0
+and original_bot_code in ('LZZXKF','C2ZXKF','LZZXKFWBYH','DHYQY','DHYTYDL','LZYX',  'TEZSXTTOC', 'C3GYKF')
+and seat_account not in ('wanghaoyu', 'a-yuxiaotong', 'lihuiwu','w_zhangrongfei2','undefined','bashan','sunchao01','linjiling','a-liping','a-zhangxiaoping','w_machengyao')
+and DATE_FORMAT(create_time,'%Y-%m-%d') > date_sub(curdate(),interval 1 month)
+
+
+-- -- 获取坐席采纳的知识推荐的 context_id
+-- select context_id from t_seat_assist_dialogue_log 
+-- WHERE source='zuoxifuzhu' and res_mode=1 and knowledge_id <> 10086 AND user_input <> '转人工'
+-- and (edited = 1 or sended = 1)
+-- and seat_account not in ('wanghaoyu', 'a-yuxiaotong', 'lihuiwu','w_zhangrongfei2','undefined','bashan','sunchao01','linjiling','a-liping','a-zhangxiaoping','w_machengyao')
+-- and original_bot_code in ('LZZXKF','C2ZXKF','LZZXKFWBYH','DHYQY','DHYTYDL','LZYX',  'TEZSXTTOC', 'C3GYKF')
+-- and DATE_FORMAT(create_time,'%Y-%m-%d') > date_sub(curdate(),interval 1 month)
+
+
+-- -- 获取所有的 context_id
+-- select context_id from t_seat_assist_dialogue_log 
+-- where response_code = 0
+-- and original_bot_code in ('LZZXKF','C2ZXKF','LZZXKFWBYH','DHYQY','DHYTYDL','LZYX',  'TEZSXTTOC', 'C3GYKF')
+-- and seat_account not in ('wanghaoyu', 'a-yuxiaotong', 'lihuiwu','w_zhangrongfei2','undefined','bashan','sunchao01','linjiling','a-liping','a-zhangxiaoping','w_machengyao')
+-- and DATE_FORMAT(create_time,'%Y-%m-%d') > date_sub(curdate(),interval 1 month)
+
+
+-- 获取 context_id 对应的上下文及响应信息
+SELECT createtime,calltype,b.message,c.user_input,c.response,c.sop_code,c.source,c.edited,c.sended 
+FROM (
+    SELECT *
+    FROM oc_chat_message a
+    WHERE a.contextid='0017ab678a604c858819ab27dcc5ad82'
+        AND tousername <> '龙小湖'
+        AND username <> '龙小湖'
+    ) b
+    LEFT JOIN (
+        SELECT *
+        FROM t_seat_assist_dialogue_log
+        where context_id='0017ab678a604c858819ab27dcc5ad82'
+    ) c
+    ON b.message_id=c.message_id
+ORDER BY createtime ASC
+
+
+-- 获取sop知识
+select * from t_seat_assist_sop where yn=1 and is_leaf=1
+
+
+-- 获取所有 flow 的知识
+select * from oc_knowledge_management  
+where yn=1 and STATUS IN ( 2, 4 )
+
+
+-- 获取坐席辅助场景对应 flow 下的可用知识（配置了坐席答案）√
+SELECT DISTINCT
+    a.knowledge_id,
+    a.primary_question,
+    a.similar_question,
+    a.base_code,
+    a.key_word,
+    a.category_id
+FROM
+    oc_knowledge_management a
+    JOIN oc_answer_new b ON b.knowledge_id = a.knowledge_id
+    JOIN oc_knowledge_base_code d ON d.base_code = a.base_code
+WHERE
+    a.yn = 1
+    AND a.STATUS IN ( 2, 4 )
+    AND a.base_code IN (
+        SELECT c.base_code
+        FROM oc_knowledge_base_flow c
+        WHERE c.yn = 1 AND c.flow_code in ('LZZXFZ')
+        AND c.base_code != 'HMDBASE' )
+    AND d.yn = 1
+    AND d.status = 1
+    AND b.yn = 1
+    AND b.status = 1
+    -- AND b.channel_flag LIKE '%%坐席%%'
+
+
+-- 获取对话机器人对应 flow 下的可用知识
+SELECT DISTINCT
+    a.knowledge_id,
+    a.primary_question,
+    a.similar_question,
+    a.base_code,
+    a.key_word,
+    a.category_id
+FROM
+    oc_knowledge_management a
+    JOIN oc_knowledge_category_switch b ON a.category_id = b.category_id
+    JOIN oc_answer_mapping d ON a.knowledge_id = d.knowledge_id
+    JOIN oc_answer_new e ON e.answer_id = d.answer_id
+WHERE
+    a.yn = 1
+    AND d.yn = 1
+    AND e.yn = 1
+    AND a.STATUS IN ( 1, 2, 4 )
+    AND b.is_open = 1
+    AND b.yn = 1
+    AND b.flow_code IN ( SELECT f.flow_code FROM oc_robot_config f WHERE f.dialogue_robot = 1 )
+    AND a.base_code IN (
+        SELECT
+            c.base_code
+        FROM
+            oc_knowledge_base_type c
+        WHERE
+            c.yn = 1
+        AND c.base_type_code IN ( 'bot', 'chat') OR a.base_code IN ("XIANLIAOBASE", "ZRGBASE"))
+    AND e.yn = 1
+    AND e.channel_flag LIKE '%%在线%%'
